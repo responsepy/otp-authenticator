@@ -5,6 +5,7 @@ const path = require('path');
 const { importFile, findScrapeFiles, findAuthenticatorLogs, isAuthenticatorLog, mainFolderName } = require('../src/importer');
 const { createStore } = require('../src/store');
 const { generateTOTP } = require('../src/totp');
+const { findSiteLogins } = require('../src/passwordFinder');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'otp-auth-'));
 const filePath = path.join(dir, 'Auth', '000003.log');
@@ -91,5 +92,22 @@ assert.deepStrictEqual(found.map((item) => item.profile).sort(), [
   'ID[TELEGRAM @PIXELCLOUD2]2025_12_08T18_96_45_846447',
   'ID[TELEGRAM @PIXELCLOUD2]2025_12_08T18_96_45_846447',
 ]);
+
+const dumpRoot = path.join(dir, 'ID[TELEGRAM @PIXELCLOUD2]2025_12_08T18_96_45_846447');
+const passwordsFile = path.join(dumpRoot, 'passwords.txt');
+fs.writeFileSync(passwordsFile, [
+  'URL: https://github.com/login',
+  'USER: octocat',
+  'PASS: hunter2',
+  '',
+  'URL: https://discord.com/login',
+  'USER: other',
+  'PASS: secret',
+].join('\n'));
+const siteLogins = findSiteLogins(withExtId, { issuer: 'GitHub', account: 'octocat' });
+assert.ok(siteLogins.files.includes(passwordsFile));
+assert.strictEqual(siteLogins.pairs.length, 1);
+assert.strictEqual(siteLogins.pairs[0].user, 'octocat');
+assert.strictEqual(siteLogins.pairs[0].password, 'hunter2');
 
 console.log('importer tests passed');

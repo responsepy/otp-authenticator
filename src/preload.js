@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('otp', {
   copyCode: (id) => ipcRenderer.invoke('accounts:copy-code', id),
   copyText: (text) => ipcRenderer.invoke('accounts:copy-text', text),
   copyUri: (id) => ipcRenderer.invoke('accounts:copy-uri', id),
+  siteLogins: (id) => ipcRenderer.invoke('accounts:site-logins', id),
   importFiles: (profile) => ipcRenderer.invoke('import:pick-files', profile),
   importPaths: (paths, profile) => ipcRenderer.invoke('import:paths', paths, profile),
   scrape: () => ipcRenderer.invoke('import:scrape'),

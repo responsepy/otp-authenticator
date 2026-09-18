@@ -8,7 +8,7 @@ const { scrapeInWorker } = require('./jobs');
 const { categorizeEntry, countCategories, CATEGORY_COLORS } = require('./categorizer');
 const { guessSiteForEntry, normalizeUrl, KNOWN_SITES } = require('./siteResolver');
 const { openDirectory, informativeAncestorDirectory, shortSourceLabel } = require('./fileUtils');
-const { findPasswordsTxtInAncestors, findCredentialsInPassFiles, searchPasswordsNearLogin } = require('./passwordFinder');
+const { findPasswordsTxtInAncestors, findCredentialsInPassFiles, searchPasswordsNearLogin, findSiteLogins } = require('./passwordFinder');
 
 let store;
 let mainWindow;
@@ -279,6 +279,24 @@ ipcMain.handle('accounts:copy-code', (_event, id) => {
 ipcMain.handle('accounts:copy-text', (_event, text) => {
   clipboard.writeText(String(text || ''));
   return true;
+});
+
+ipcMain.handle('accounts:site-logins', (_event, id) => {
+  const account = store.get(String(id));
+  if (!account) throw new Error('Account not found');
+  if (!account.source_path) throw new Error('No source folder for this account');
+  const found = findSiteLogins(account.source_path, {
+    account: account.account,
+    issuer: account.issuer,
+    site: guessSiteForEntry(account),
+  });
+  return {
+    issuer: account.issuer || '',
+    account: account.account || '',
+    files: found.files,
+    pairs: found.pairs,
+    unmatched: found.unmatched,
+  };
 });
 
 ipcMain.handle('accounts:copy-uri', (_event, id) => {

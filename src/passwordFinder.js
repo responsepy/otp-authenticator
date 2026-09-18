@@ -92,19 +92,19 @@ function parseCredentialFile(candidate) {
 
   lines.forEach((line, index) => {
     const lineNo = index + 1;
-    const urlMatch = line.match(/^\s*URL\s*[:=]\s*(.+)$/i);
+    const urlMatch = line.match(/^\s*(URL|HOST|SOFT)\s*[:=]\s*(.+)$/i);
     if (urlMatch) {
-      currentUrl = urlMatch[1].trim();
+      if (/^(URL|HOST)$/i.test(urlMatch[1])) currentUrl = urlMatch[2].trim();
       return;
     }
-    const userMatch = line.match(/^\s*USER\s*[:=]\s*(.+)$/i);
+    const userMatch = line.match(/^\s*(USER|USERNAME|LOGIN|EMAIL|LOGIN_NAME)\s*[:=]\s*(.+)$/i);
     if (userMatch) {
-      currentUser = userMatch[1].trim();
+      currentUser = userMatch[2].trim();
       return;
     }
-    const passMatch = line.match(/^\s*PASS\s*[:=]\s*(.+)$/i);
+    const passMatch = line.match(/^\s*(PASS|PASSWORD|PWD)\s*[:=]\s*(.+)$/i);
     if (passMatch) {
-      const passVal = passMatch[1].trim();
+      const passVal = passMatch[2].trim();
       if (currentUser) {
         results.push({ file: candidate, line_no: lineNo, type: 'login', key: 'user', value: currentUser, masked: maskValue(currentUser), url: currentUrl });
         results.push({ file: candidate, line_no: lineNo, type: 'password', key: 'pass', value: passVal, masked: maskValue(passVal), url: currentUrl });
@@ -393,6 +393,128 @@ function formatResultDisplay(item) {
   return key ? `${key}: ${value}` : value;
 }
 
+function isPasswordTxtName(name) {
+  const lower = String(name || '').toLowerCase();
+  return lower === 'password.txt' || lower === 'passwords.txt';
+}
+
+function ancestorDirectories(filePath, maxDepth = 14) {
+  const dirs = [];
+  if (!filePath) return dirs;
+  let current = filePath;
+  try {
+    if (!fs.existsSync(current) || !fs.statSync(current).isDirectory()) {
+      current = path.dirname(current);
+    }
+  } catch {
+    current = path.dirname(current);
+  }
+  let depth = 0;
+  while (current && depth <= maxDepth) {
+    dirs.push(current);
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+    depth += 1;
+  }
+  return dirs;
+}
+
+function findPasswordTxtFiles(sourcePath, maxDepth = 14) {
+  const files = [];
+  const seen = new Set();
+  for (const dir of ancestorDirectories(sourcePath, maxDepth)) {
+    let names = [];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!isPasswordTxtName(name)) continue;
+      const full = path.join(dir, name);
+      if (seen.has(full)) continue;
+      try {
+        if (!fs.statSync(full).isFile()) continue;
+      } catch {
+        continue;
+      }
+      seen.add(full);
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+function credentialPairsFromItems(items) {
+  const sorted = items.slice().sort((a, b) => Number(a.line_no || 0) - Number(b.line_no || 0));
+  const pairs = [];
+  sorted.forEach((item, index) => {
+    if (!String(item.type || '').includes('login')) return;
+    for (let cursor = index; cursor < Math.min(index + 4, sorted.length); cursor += 1) {
+      const candidate = sorted[cursor];
+      if (!String(candidate.type || '').includes('password')) continue;
+      pairs.push({
+        file: item.file || candidate.file,
+        url: item.url || candidate.url || '',
+        user: item.value || '',
+        password: candidate.value || '',
+        login_line: item.line_no,
+        password_line: candidate.line_no,
+      });
+      break;
+    }
+  });
+  return pairs;
+}
+
+function siteMatchTokens(entry) {
+  const tokens = new Set();
+  for (const value of [entry.account, entry.issuer, entry.site]) {
+    const text = String(value || '').toLowerCase();
+    if (!text) continue;
+    tokens.add(text);
+    const domain = text.match(/([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)/i);
+    if (domain) tokens.add(domain[1].toLowerCase());
+    for (const token of text.split(/[^a-z0-9]+/i)) {
+      if (token && token.length >= 3 && token !== 'www' && token !== 'com' && token !== 'https') {
+        tokens.add(token);
+      }
+    }
+  }
+  return tokens;
+}
+
+function pairMatchesSite(pair, entry) {
+  const tokens = siteMatchTokens(entry);
+  if (!tokens.size) return false;
+  const hay = [pair.url, pair.user, pair.file].map((value) => String(value || '').toLowerCase()).join(' ');
+  const account = String(entry.account || '').toLowerCase();
+  if (account && String(pair.user || '').toLowerCase() === account) return true;
+  for (const token of tokens) {
+    if (token && hay.includes(token)) return true;
+  }
+  return false;
+}
+
+function findSiteLogins(sourcePath, entry) {
+  const files = findPasswordTxtFiles(sourcePath);
+  const all = [];
+  for (const file of files) {
+    try {
+      all.push(...credentialPairsFromItems(parseCredentialFile(file)));
+    } catch {
+      // skip unreadable files
+    }
+  }
+  const matched = all.filter((pair) => pairMatchesSite(pair, entry || {}));
+  return {
+    files,
+    pairs: matched.length ? matched : [],
+    unmatched: matched.length ? [] : all,
+  };
+}
+
 module.exports = {
   searchRelatedPasswords,
   findPasswordsTxtInAncestors,
@@ -403,4 +525,8 @@ module.exports = {
   relevantCredential,
   formatResultDisplay,
   maskValue,
+  isPasswordTxtName,
+  findPasswordTxtFiles,
+  findSiteLogins,
+  credentialPairsFromItems,
 };

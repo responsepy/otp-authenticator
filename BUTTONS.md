@@ -32,6 +32,7 @@ Keyboard: **Ctrl/Cmd+N** add, **Ctrl/Cmd+O** import, **Ctrl/Cmd+Shift+O** scrape
 |---|---|
 | Click the code | Copy the current OTP |
 | **Copy login** | Copy username / email |
+| **Show login** | Find matching USER/PASS in nearby `password.txt` / `passwords.txt` for that site |
 | **Open site** | Open the guessed login page |
 | **Passwords (N)** | Show related passwords found near the import |
 | **Logins (N)** | Show logins from nearby `*Pass*.txt` files |

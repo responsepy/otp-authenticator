@@ -222,6 +222,7 @@ function render() {
           ` : `
             <button type="button" data-copy="${item.id}">Copy code</button>
             <button type="button" data-login="${item.id}">Copy login</button>
+            <button type="button" data-show-login="${item.id}">Show login</button>
             <button type="button" data-site="${item.id}">Open site</button>
           `}
           ${item.password_count ? `<button type="button" data-passwords="${item.id}">Passwords (${item.password_count})</button>` : ''}
@@ -289,6 +290,7 @@ async function handleCardClick(event, item) {
     await window.otp.copyText(item.account || '');
     return toast('Login copied');
   }
+  if (target.dataset.showLogin) return showSiteLogins(item);
   if (target.dataset.site) return safeCall(() => window.otp.openSite(item.id), 'Opened site');
   if (target.dataset.dir) return safeCall(() => window.otp.openDir(item.id), 'Opened folder');
   if (target.dataset.raw) return showRaw(item);
@@ -310,6 +312,68 @@ function passwordItems(item) {
     seen.add(value);
     return true;
   });
+}
+
+async function showSiteLogins(item) {
+  try {
+    const found = await window.otp.siteLogins(item.id);
+    const pairs = found.pairs.length ? found.pairs : found.unmatched;
+    const title = found.pairs.length
+      ? `Logins for ${found.issuer || found.account || 'this site'}`
+      : found.unmatched.length
+        ? `No site match — all logins from password.txt`
+        : `Logins for ${found.issuer || found.account || 'this site'}`;
+    showLoginPairs(title, pairs);
+  } catch (error) {
+    toast(String(error.message || error));
+  }
+}
+
+function showLoginPairs(title, pairs) {
+  document.getElementById('detail-title').textContent = title;
+  const list = document.getElementById('detail-list');
+  const raw = document.getElementById('detail-raw');
+  raw.hidden = true;
+  list.hidden = false;
+  list.innerHTML = '';
+  if (!pairs.length) {
+    list.innerHTML = '<li>No user/pass found in password.txt or passwords.txt</li>';
+    detailDialog.showModal();
+    return;
+  }
+  for (const pair of pairs) {
+    const li = document.createElement('li');
+    li.className = 'login-pair';
+    const user = pair.user || '';
+    const password = pair.password || '';
+    const url = pair.url || '';
+    li.innerHTML = `
+      <div class="login-pair-body">
+        ${url ? `<div class="login-url">${escapeHtml(url)}</div>` : ''}
+        <div>USER: ${escapeHtml(user)}</div>
+        <div>PASS: ${escapeHtml(password)}</div>
+      </div>
+    `;
+    const actions = document.createElement('span');
+    const copyUser = document.createElement('button');
+    copyUser.type = 'button';
+    copyUser.textContent = 'Copy user';
+    copyUser.addEventListener('click', async () => {
+      await window.otp.copyText(user);
+      toast('User copied');
+    });
+    const copyPass = document.createElement('button');
+    copyPass.type = 'button';
+    copyPass.textContent = 'Copy pass';
+    copyPass.addEventListener('click', async () => {
+      await window.otp.copyText(password);
+      toast('Password copied');
+    });
+    actions.append(copyUser, copyPass);
+    li.appendChild(actions);
+    list.appendChild(li);
+  }
+  detailDialog.showModal();
 }
 
 function showItems(title, items, cleartextDefault = false) {
@@ -359,6 +423,7 @@ function showContextMenu(event, item) {
     : [
       ['Copy code', () => window.otp.copyCode(item.id)],
       ['Copy login', () => window.otp.copyText(item.account || '')],
+      ['Show login', () => showSiteLogins(item)],
       ['Copy issuer', () => window.otp.copyText(item.issuer || '')],
       ['Copy URI', () => window.otp.copyUri(item.id)],
       ['Open site', () => window.otp.openSite(item.id)],
