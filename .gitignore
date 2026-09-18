@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+build/icon.iconset/
+.DS_Store
+*.local
+.env
+.env.*

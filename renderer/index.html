@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OTP Authenticator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="toolbar">
+      <div class="brand">
+        <img class="mark" src="icon.png" alt="OTP Authenticator" />
+        <div>
+          <h1>Authenticator</h1>
+          <p class="muted" id="count">0 accounts</p>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button class="ghost" id="add-btn" type="button">Add</button>
+        <button class="primary" id="scrape-btn" type="button">Scrape</button>
+        <button class="ghost" id="import-btn" type="button">Import</button>
+        <label class="theme-switch" title="Toggle dark mode">
+          <span>Light</span>
+          <input id="theme-switch" type="checkbox" />
+          <span class="switch" aria-hidden="true"></span>
+          <span>Dark</span>
+        </label>
+      </div>
+    </header>
+
+    <section class="filters">
+      <label class="search">
+        <input id="search" type="search" placeholder="Search issuer or account" />
+      </label>
+      <button class="ghost compact" id="clear-btn" type="button">Clear</button>
+      <select id="category"></select>
+      <select id="password-filter">
+        <option>All</option>
+        <option>With Passwords</option>
+        <option>Without Passwords</option>
+      </select>
+      <select id="type-filter"></select>
+      <select id="profile"></select>
+      <button class="ghost compact danger" id="delete-selected-btn" type="button">Delete selected profile</button>
+      <button class="ghost compact danger" id="delete-all-btn" type="button">Delete all profiles</button>
+      <button class="ghost compact" id="profiles-btn" type="button">Profiles</button>
+      <button class="ghost compact" id="prefs-btn" type="button">Prefs</button>
+    </section>
+
+    <section class="drop" id="drop">
+      Drop exported logs here, or use Scrape to pick a dump directory.
+    </section>
+
+    <section class="progress-panel" id="progress-panel" hidden>
+      <div class="progress-head">
+        <span id="progress-label">Working…</span>
+        <span id="progress-count">0%</span>
+      </div>
+      <div class="progress-track" aria-hidden="true">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <p class="progress-detail" id="progress-detail"></p>
+    </section>
+
+    <main id="list" class="list"></main>
+    <p class="empty" id="empty">Import an authenticator export, scrape a folder, or add an otpauth URI.</p>
+
+    <footer class="status">
+      <span id="status">Ready</span>
+      <span id="cats">No categories</span>
+    </footer>
+  </div>
+
+  <dialog id="add-dialog">
+    <form method="dialog" id="add-form">
+      <h2>Add account</h2>
+      <label>otpauth URI
+        <textarea id="uri" rows="3" placeholder="otpauth://totp/GitHub:you@mail.com?secret=..."></textarea>
+      </label>
+      <p class="or">or enter manually</p>
+      <div class="row">
+        <label>Issuer <input id="issuer" type="text" placeholder="GitHub" /></label>
+        <label>Account <input id="account" type="text" placeholder="you@mail.com" /></label>
+      </div>
+      <label>Secret <input id="secret" type="text" spellcheck="false" placeholder="JBSWY3DPEHPK3PXP" /></label>
+      <p class="error" id="add-error" hidden></p>
+      <div class="actions">
+        <button value="cancel" class="ghost">Cancel</button>
+        <button id="save-account" type="button" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="profiles-dialog">
+    <form method="dialog">
+      <h2>Profiles</h2>
+      <ul id="profile-list" class="plain-list"></ul>
+      <div class="row">
+        <input id="profile-name" type="text" placeholder="New profile name" />
+        <button id="create-profile" type="button" class="primary">Create</button>
+      </div>
+      <div class="actions">
+        <button id="delete-all-profiles" type="button" class="danger">Delete all profiles</button>
+        <button value="close" class="ghost">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="prefs-dialog">
+    <form method="dialog" id="prefs-form">
+      <h2>Preferences</h2>
+      <label class="check"><input type="checkbox" id="pref-cleartext" /> Show passwords in cleartext</label>
+      <label class="check"><input type="checkbox" id="pref-binary" /> Scan binary files when scraping</label>
+      <label class="check"><input type="checkbox" id="pref-dnd" /> Enable drag-and-drop overlay</label>
+      <label class="check"><input type="checkbox" id="pref-autoprofile" /> Auto-add import path to selected profile</label>
+      <label class="check"><input type="checkbox" id="pref-validate" /> Validate OTP secrets on import</label>
+      <label>Max import workers
+        <input id="pref-workers" type="number" min="1" max="32" />
+      </label>
+      <fieldset>
+        <legend>Enabled types</legend>
+        <label class="check"><input type="checkbox" value="totp" class="pref-type" /> TOTP</label>
+        <label class="check"><input type="checkbox" value="hotp" class="pref-type" /> HOTP</label>
+        <label class="check"><input type="checkbox" value="authy" class="pref-type" /> Authy</label>
+        <label class="check"><input type="checkbox" value="authy-asset" class="pref-type" /> Authy asset</label>
+        <label class="check"><input type="checkbox" value="other" class="pref-type" /> Other</label>
+      </fieldset>
+      <div class="actions">
+        <button value="cancel" class="ghost">Cancel</button>
+        <button id="save-prefs" type="button" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog">
+    <form method="dialog">
+      <h2 id="detail-title">Details</h2>
+      <ul id="detail-list" class="plain-list"></ul>
+      <pre id="detail-raw" hidden></pre>
+      <div class="actions">
+        <button value="close" class="ghost">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="about-dialog">
+    <form method="dialog">
+      <h2>OTP Authenticator</h2>
+      <p>Import authenticator exports, categorize accounts, and copy live TOTP/HOTP codes on Mac, Windows, and Linux.</p>
+      <div class="actions"><button value="close" class="primary">Close</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
