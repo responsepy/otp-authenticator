@@ -73,7 +73,7 @@ A Windows installer should be built **on Windows**. Cross-building from macOS ne
 ### Scrape (main workflow)
 
 1. Click **Scrape** (or **File → Scrape Directory…**).
-2. Pick the parent folder that contains one or more dumps.
+2. Pick the Stealer Log folder that contains one or more dumps.
 3. The app walks every subfolder and imports `.log` files under a path that contains `Auth`, `2FA`, or `Authenticator`.
 4. Chrome Authenticator files named `000003.log` are included even if they look binary.
 5. Each dump’s **main folder name** becomes a profile (the folder that contains `Plugins`, or the parent of the Authenticator folder).
