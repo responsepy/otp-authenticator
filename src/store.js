@@ -95,7 +95,7 @@ function createStore(filePath) {
       persist();
       return publicAccount(account);
     },
-    addMany(entries) {
+    addMany(entries, options = {}) {
       const keys = existingKeys();
       const added = [];
       for (const entry of entries) {
@@ -124,8 +124,11 @@ function createStore(filePath) {
         state.accounts.push(account);
         added.push(publicAccount(account));
       }
-      if (added.length) persist();
+      if (added.length && options.persist !== false) persist();
       return added;
+    },
+    flush() {
+      persist();
     },
     update(id, patch) {
       const index = state.accounts.findIndex((item) => item.id === id);
@@ -150,11 +153,11 @@ function createStore(filePath) {
       persist();
       return true;
     },
-    ensureProfile(name) {
+    ensureProfile(name, options = {}) {
       if (!name) return false;
       if (!state.profiles[name]) {
         state.profiles[name] = [];
-        persist();
+        if (options.persist !== false) persist();
       }
       return true;
     },
@@ -185,11 +188,11 @@ function createStore(filePath) {
       persist();
       return true;
     },
-    addPathToProfile(profile, filePath) {
+    addPathToProfile(profile, filePath, options = {}) {
       if (!state.profiles[profile]) return false;
       if (!state.profiles[profile].includes(filePath)) {
         state.profiles[profile].push(filePath);
-        persist();
+        if (options.persist !== false) persist();
       }
       return true;
     },

@@ -47,13 +47,18 @@ function annotateEntries(entries, filePath, profile, prefs, options = {}) {
 function importFile(filePath, options = {}) {
   const prefs = options.prefs || {};
   const profile = options.profile || 'Unassigned';
+  const base = path.basename(filePath).toLowerCase();
   let mode = 'otp';
-  try {
-    mode = detectFileFormat(filePath);
-  } catch {
+  if (base === '000003.log' || base.includes('000003')) {
     mode = 'otp';
+  } else {
+    try {
+      mode = detectFileFormat(filePath);
+    } catch {
+      mode = 'otp';
+    }
+    if (mode === 'all') mode = 'otp';
   }
-  if (mode === 'all') mode = 'otp';
   const entries = loadAndNormalize(filePath, mode);
   return annotateEntries(entries, filePath, profile, prefs, options);
 }
@@ -75,9 +80,17 @@ function shouldSkipScrapeFile(filePath, prefs = {}) {
   return isProbablyBinary(filePath, false);
 }
 
-function findScrapeFiles(rootDir, prefs = {}) {
+function shouldSkipDirName(name) {
+  const lower = String(name || '').toLowerCase();
+  if (!lower) return true;
+  if (lower.startsWith('.') && lower !== '.' && lower !== '..') return true;
+  return SKIP_DIR_NAMES.has(lower);
+}
+
+function findScrapeFiles(rootDir, prefs = {}, onDir) {
   const files = [];
   const stack = [rootDir];
+  let scannedDirs = 0;
   while (stack.length) {
     const dir = stack.pop();
     let entries = [];
@@ -86,18 +99,20 @@ function findScrapeFiles(rootDir, prefs = {}) {
     } catch {
       continue;
     }
+    scannedDirs += 1;
     const inTarget = isScrapeTargetPath(dir);
     for (const entry of entries) {
-      const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (SKIP_DIR_NAMES.has(entry.name.toLowerCase())) continue;
-        stack.push(full);
+        if (shouldSkipDirName(entry.name)) continue;
+        stack.push(path.join(dir, entry.name));
         continue;
       }
       if (!inTarget) continue;
+      const full = path.join(dir, entry.name);
       if (shouldSkipScrapeFile(full, prefs)) continue;
       files.push(full);
     }
+    if (onDir && scannedDirs % 80 === 0) onDir(scannedDirs, files.length);
   }
   return files;
 }
@@ -110,14 +125,21 @@ async function scrapeDirectory(rootDir, options = {}) {
   const prefs = { ...(options.prefs || {}), skip_passwords: true };
   const onProgress = options.onProgress || (async () => {});
   await onProgress({ phase: 'scan', label: 'Searching folders…', found: 0 });
-  await yieldTick();
-  const files = findScrapeFiles(rootDir, prefs);
+  const files = findScrapeFiles(rootDir, prefs, (scannedDirs, found) => {
+    onProgress({
+      phase: 'scan',
+      scannedDirs,
+      found,
+      label: found ? `Searching… ${found} log${found === 1 ? '' : 's'} found` : 'Searching folders…',
+    });
+  });
   await onProgress({
     phase: 'scan',
     label: files.length
       ? `Searching… ${files.length} log${files.length === 1 ? '' : 's'} found`
       : 'Searching folders…',
     found: files.length,
+    scannedDirs: 0,
     done: true,
   });
   const collected = [];
@@ -207,7 +229,17 @@ async function importFiles(paths, options = {}) {
   return collected;
 }
 
-const SKIP_DIR_NAMES = new Set(['node_modules', '.git', 'dist', '__pycache__']);
+const SKIP_DIR_NAMES = new Set([
+  'node_modules', '.git', 'dist', '__pycache__',
+  '$recycle.bin', 'system volume information', 'windows', 'windows.old',
+  'program files', 'program files (x86)', 'programdata', 'recovery', 'msocache',
+  'cache', 'code cache', 'gpucache', 'shadercache', 'grshadercache',
+  'service worker', 'service worker cachestorage', 'indexeddb', 'blob_storage',
+  'platform notifications', 'file system', 'session storage', 'local storage',
+  'pepper data', 'shared dictionary',
+  'optimizationguidepredictionmodels', 'safebrowsing', 'crashpad',
+  'application cache', 'jumplistdata', 'videodecodestats',
+]);
 
 function pathParts(filePath) {
   return path.normalize(filePath).split(/[/\\]/).filter(Boolean);

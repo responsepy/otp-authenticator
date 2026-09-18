@@ -3,7 +3,8 @@ const path = require('path');
 const { createStore } = require('./store');
 const { generateTOTP, generateHOTP, remainingSeconds, isValidSecret } = require('./totp');
 const { parseOtpAuth, toOtpAuth } = require('./uri');
-const { importFiles, scrapeDirectory } = require('./importer');
+const { importFiles } = require('./importer');
+const { scrapeInWorker } = require('./jobs');
 const { categorizeEntry, countCategories, CATEGORY_COLORS } = require('./categorizer');
 const { guessSiteForEntry, normalizeUrl, KNOWN_SITES } = require('./siteResolver');
 const { openDirectory, informativeAncestorDirectory, shortSourceLabel } = require('./fileUtils');
@@ -33,6 +34,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -158,14 +160,15 @@ async function runImport(paths, profile) {
     prefs,
     profile,
     onProgress: async (progress) => {
-      const added = store.addMany(progress.entries || []);
+      const added = store.addMany(progress.entries || [], { persist: false });
       addedAll.push(...added);
       if (prefs.auto_add_path_to_profile && profile && profile !== 'All Profiles') {
-        store.addPathToProfile(profile, progress.file);
+        store.addPathToProfile(profile, progress.file, { persist: false });
       }
       emitProgress(progressPayload(progress, { added: added.length, label: 'Importing files…' }));
     },
   });
+  store.flush();
   importing = false;
   const state = snapshot();
   notify('Import complete', `${addedAll.length} accounts added`);
@@ -318,26 +321,24 @@ ipcMain.handle('import:scrape', async (_event, profile) => {
   const addedAll = [];
   const profiles = new Set();
   try {
-    const scraped = await scrapeDirectory(result.filePaths[0], {
-      prefs,
-      onProgress: async (progress) => {
-        if (progress.phase === 'scan') {
-          emitProgress(progressPayload(progress, { label: progress.label || 'Searching folders…' }));
-          return;
-        }
-        if (progress.profile) {
-          store.ensureProfile(progress.profile);
-          if (progress.file) store.addPathToProfile(progress.profile, progress.file);
-          profiles.add(progress.profile);
-        }
-        const added = store.addMany(progress.entries || []);
-        addedAll.push(...added);
-        emitProgress(progressPayload(progress, {
-          added: added.length,
-          label: progress.label || 'Importing logs…',
-        }));
-      },
+    const scraped = await scrapeInWorker(result.filePaths[0], prefs, (progress) => {
+      if (progress.phase === 'scan') {
+        emitProgress(progressPayload(progress, { label: progress.label || 'Searching folders…' }));
+        return;
+      }
+      if (progress.profile) {
+        store.ensureProfile(progress.profile, { persist: false });
+        if (progress.file) store.addPathToProfile(progress.profile, progress.file, { persist: false });
+        profiles.add(progress.profile);
+      }
+      const added = store.addMany(progress.entries || [], { persist: false });
+      addedAll.push(...added);
+      emitProgress(progressPayload(progress, {
+        added: added.length,
+        label: progress.label || 'Importing logs…',
+      }));
     });
+    store.flush();
     notify(
       'Scrape complete',
       scraped.files

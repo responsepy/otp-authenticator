@@ -77,7 +77,7 @@ A Windows installer should be built **on Windows**. Cross-building from macOS ne
 3. The app walks every subfolder and imports `.log` files under a path that contains `Auth`, `2FA`, or `Authenticator`.
 4. Chrome Authenticator files named `000003.log` are included even if they look binary.
 5. Each dump’s **main folder name** becomes a profile (the folder that contains `Plugins`, or the parent of the Authenticator folder).
-6. A progress bar shows search, then each file as it is imported.
+6. A progress bar shows search, then each file as it is imported. The scan runs on a background thread so the window stays movable.
 
 Typical path that is picked up:
 

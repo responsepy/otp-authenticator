@@ -1,6 +1,6 @@
 {
   "name": "otp-authenticator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop TOTP/HOTP authenticator with export import for Mac, Windows, and Linux",
   "main": "src/main.js",
   "author": "OTP Authenticator",
@@ -31,6 +31,9 @@
       "build/icon.png",
       "build/icon.ico",
       "package.json"
+    ],
+    "asarUnpack": [
+      "src/**/*.js"
     ],
     "icon": "build/icon.png",
     "mac": {

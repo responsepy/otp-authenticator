@@ -79,6 +79,11 @@ assert.ok(scrapedAfter.includes(withExtId), 'scrape should find Authenticator 00
 assert.ok(scrapedAfter.includes(ignored), 'scrape should find Authenticator_Chrome_* 000003.log');
 assert.ok(!scrapedAfter.includes(stray), 'scrape should ignore 000003.log outside auth paths');
 
+const cacheLog = path.join(dumpA, 'Cache', '000003.log');
+fs.mkdirSync(path.dirname(cacheLog), { recursive: true });
+fs.writeFileSync(cacheLog, '{"dataType":"OTPStorage","account":"x","issuer":"x","secret":"JBSWY3DPEHPK3PXP"}');
+assert.ok(!findScrapeFiles(dir).includes(cacheLog), 'scrape should skip Chrome Cache folders');
+
 const found = findAuthenticatorLogs(dir);
 assert.strictEqual(found.length, 3);
 assert.deepStrictEqual(found.map((item) => item.profile).sort(), [
